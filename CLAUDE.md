@@ -8,6 +8,13 @@ Operating context for AI assistants working in this repository. Read
 
 - Miro board: https://miro.com/app/board/uXjVHx1NPkM=/
 
+## Git remote policy
+
+- Use only the personal fork remote `fork`:
+  https://github.com/jaggermeister74/econspace-mmo.git.
+- All remote Git operations, including fetch, pull, and push, must target `fork`.
+  Do not use the `origin` remote.
+
 ## What this is
 
 EconSpace is a 2D EVE-like space-sim **MMO** in C++17 on top of raylib. The server owns
