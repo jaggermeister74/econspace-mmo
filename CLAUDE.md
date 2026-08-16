@@ -14,6 +14,7 @@ Operating context for AI assistants working in this repository. Read
   https://github.com/jaggermeister74/econspace-mmo.git.
 - All remote Git operations, including fetch, pull, and push, must target `fork`.
   Do not use the `origin` remote.
+- Create commits as `jaggermeister74 <artem.neginskiy@mail.ru>`.
 
 ## What this is
 
