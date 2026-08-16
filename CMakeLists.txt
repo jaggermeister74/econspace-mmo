@@ -124,6 +124,24 @@ if(WARNINGS_AS_ERRORS)
     target_compile_options(engine PUBLIC -Werror)
 endif()
 
+# A MinGW executable needs these runtime DLLs beside it when launched directly from
+# Explorer. They are normally found through MSYS2's PATH, but a player should not have
+# to start a terminal or install MSYS2 merely to run an EconSpace binary.
+if(MINGW)
+    get_filename_component(MINGW_RUNTIME_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    set(MINGW_RUNTIME_DLLS
+        libgcc_s_seh-1.dll
+        libstdc++-6.dll
+        libwinpthread-1.dll)
+
+    foreach(runtime_dll IN LISTS MINGW_RUNTIME_DLLS)
+        if(NOT EXISTS "${MINGW_RUNTIME_DIR}/${runtime_dll}")
+            message(FATAL_ERROR "Required MinGW runtime DLL is missing: ${MINGW_RUNTIME_DIR}/${runtime_dll}")
+        endif()
+    endforeach()
+
+endif()
+
 # --- Shared wire layer -----------------------------------------------------
 # Protocol + transport, compiled ONCE and linked by everything that speaks the wire:
 # the client, the server and the tests. These two files used to appear in three
@@ -161,7 +179,8 @@ add_executable(econspace
 )
 target_link_libraries(econspace PRIVATE engine netproto)  # netproto brings src/game + winsock
 set_target_properties(econspace PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/game)
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/game
+    WIN32_EXECUTABLE TRUE)
 # Dev convenience: the game reads the world from the SOURCE data/ (like the editor),
 # so edits made in the editor show up immediately without a rebuild. For a "release"
 # build the define can be dropped — then it reads the copy next to the exe.
@@ -206,6 +225,20 @@ set_target_properties(econagent PROPERTIES
 # The galaxy index and factions are read locally, as the game client reads them.
 target_compile_definitions(econagent PRIVATE AGENT_DATA_DIR="${CMAKE_SOURCE_DIR}/data/")
 
+# --- Launcher ---------------------------------------------------------------
+# A small raylib window that supplies the mandatory connection arguments to the client
+# and can start a bundled local server. It owns no game state and links only engine.
+add_executable(econlauncher
+    src/launcher/main.cpp
+)
+target_link_libraries(econlauncher PRIVATE engine)
+if(WIN32)
+    target_link_libraries(econlauncher PRIVATE ws2_32)
+endif()
+set_target_properties(econlauncher PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/launcher
+    WIN32_EXECUTABLE TRUE)
+
 # --- World editor ----------------------------------------------------------
 add_executable(worldeditor
     src/editor/main.cpp
@@ -214,7 +247,8 @@ add_executable(worldeditor
 target_include_directories(worldeditor PRIVATE ${CMAKE_SOURCE_DIR}/src/editor)
 target_link_libraries(worldeditor PRIVATE engine)
 set_target_properties(worldeditor PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/editor)
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/editor
+    WIN32_EXECUTABLE TRUE)
 # The editor edits the repository's SOURCE data (not the copy next to the exe), so
 # we bake the absolute path to data/ in at configure time.
 target_compile_definitions(worldeditor PRIVATE EDITOR_DATA_DIR="${CMAKE_SOURCE_DIR}/data/")
@@ -262,6 +296,26 @@ target_link_libraries(tests PRIVATE engine netproto doctest::doctest)
 set_target_properties(tests PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/tests)
 add_test(NAME unit COMMAND tests)
+
+# Keep every distributable executable self-contained under MinGW. It is an ALL target
+# rather than a post-link hook, so a deleted DLL is restored even when no source needed
+# recompiling. This is a no-op for MSVC and non-Windows builds.
+if(MINGW)
+    set(MINGW_RUNTIME_TARGETS econspace econserver econagent econlauncher worldeditor tests)
+    set(COPY_MINGW_RUNTIME_COMMANDS)
+    foreach(runtime_target IN LISTS MINGW_RUNTIME_TARGETS)
+        foreach(runtime_dll IN LISTS MINGW_RUNTIME_DLLS)
+            list(APPEND COPY_MINGW_RUNTIME_COMMANDS
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${MINGW_RUNTIME_DIR}/${runtime_dll}"
+                        "$<TARGET_FILE_DIR:${runtime_target}>")
+        endforeach()
+    endforeach()
+    add_custom_target(copy_mingw_runtime ALL
+        ${COPY_MINGW_RUNTIME_COMMANDS}
+        DEPENDS ${MINGW_RUNTIME_TARGETS}
+        COMMENT "Copying MinGW runtime DLLs next to executables")
+endif()
 
 # --- cppcheck: static analysis as a separate target (if installed) ----------
 # Install in MSYS2: pacman -S mingw-w64-x86_64-cppcheck

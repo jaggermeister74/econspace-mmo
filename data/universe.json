@@ -5,8 +5,12 @@
             "verge"
         ],
         [
-            "core",
-            "reach"
+            "reach",
+            "core"
+        ],
+        [
+            "reach",
+            "verge"
         ]
     ],
     "start": "core",
@@ -15,8 +19,8 @@
             "file": "core.json",
             "id": "core",
             "map": [
-                0,
-                0
+                -15,
+                -17
             ],
             "name": "Helios Core",
             "owner": "TradersGuild",
@@ -26,8 +30,8 @@
             "file": "reach.json",
             "id": "reach",
             "map": [
-                319,
-                -60
+                97,
+                163
             ],
             "name": "Sigma Reach",
             "owner": "Syndicate",

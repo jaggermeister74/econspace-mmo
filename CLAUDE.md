@@ -4,6 +4,10 @@ Operating context for AI assistants working in this repository. Read
 [DECISIONS.md](DECISIONS.md) for the reasoning behind the premises below and
 [ARCHITECTURE.md](ARCHITECTURE.md) for how the code fits together.
 
+## Project links
+
+- Miro board: https://miro.com/app/board/uXjVHx1NPkM=/
+
 ## What this is
 
 EconSpace is a 2D EVE-like space-sim **MMO** in C++17 on top of raylib. The server owns

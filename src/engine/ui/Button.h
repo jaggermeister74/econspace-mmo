@@ -11,8 +11,9 @@ class Button
 public:
     Button(Rectangle bounds, std::string label, std::function<void()> onClick);
 
-    // Draws the button and invokes the action if it was clicked this frame.
-    void Process();
+    // Draws the button and, unless disabled, invokes the action if it was clicked this frame.
+    // A modal overlay can keep its background visible while preventing click-through.
+    void Process(bool interactive = true);
 
 private:
     Rectangle             bounds_;

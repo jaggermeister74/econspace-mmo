@@ -33,26 +33,30 @@ EconSpace runs its own game logic on top of raylib (windowing/render/input only)
 **Tooling**
 - A visual **world editor** (`worldeditor`) for editing systems and galaxy links, saved to JSON.
 - A **headless server** (`econserver`) that runs the exact same simulation without a window.
+- An **MCP agent bridge** (`econagent`): an ordinary TCP game client plus an MCP server on stdio. It exposes observation, standing orders, route planning, an event journal, and a scripted end-to-end self-test.
 
 **Networking**
 - A `Command` / `Snapshot` / `SystemLayout` protocol over a swappable transport (`ITransport`): TCP (winsock) for play, plus an in-process `LocalTransport` used as a **test** seam by the `econserver hosttest` smoke test and the doctest suite.
+- Every wire message is versioned; incompatible protocol versions are rejected instead of silently decoding to defaults.
 - Client-side prediction + server reconciliation with input replay for the player's own ship, and entity interpolation for everyone else (the classic [Gambetta](https://www.gabrielgambetta.com/client-server-game-architecture.html) model).
 - Server-authoritative combat, docking, trading, missions, and player accounts.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for how it all fits together.
 
+Local fork changes are recorded in [CHANGELOG.md](CHANGELOG.md).
+
 ---
 
 ## Where it's going
 
-Everything in this section is **planned, not implemented**. It is here so contributors know what the project is aiming at, and so nobody builds against the old assumptions. Details and sequencing live in [ROADMAP.md](ROADMAP.md).
+This section describes the remaining work; shipped items are noted explicitly. Details and sequencing live in [ROADMAP.md](ROADMAP.md).
 
 - **An MMO, not a sandbox with an optional server.** The client always talks to an authoritative server. Multi-client (one session, ship, and account per connection, plus interest management) is foundational work, not a stretch goal.
 - **Glyphs as the primary look** (#36). ASCII/glyph presentation becomes the game's actual visual language rather than a debug view: it closes the art gap honestly, it lets players build structures without an artist in the loop, and the same projection is what an AI agent reads. Sprites stay possible as an alternative rendering backend instead of being the thing that blocks the project.
-- **AI agents as first-class players** (#42). The game will ship its own MCP server, `econagent`, written in C++ so the wire protocol has a single source of truth. An LLM agent (Claude Code, Claude Desktop) can then pilot a ship on high-level standing orders, and a human can play fleet commander rather than pilot.
+- **AI agents as first-class players** (#42) — **agent MVP shipped.** `econagent` is a C++ MCP server and ordinary TCP client using the same protocol as a human player. It can observe, issue high-level standing orders, plan routes and wait for events. Fleet command over several agent-piloted ships remains blocked on multi-client support.
 - **A player-mutable world** (#44). Players build deployables and structures that feed the macro simulation that already exists — prosperity, security, territory control.
 
-Today none of this is built: rendering is placeholder shapes, there is no agent API and no MCP server, and the world is read-only content authored in the editor.
+Still missing are multi-client sessions and interest management, the glyph presentation layer, and authoritative player world mutation. The game remains a prototype: rendering uses placeholder shapes, the world is small, and the server currently accepts one connected game client at a time.
 
 ---
 
@@ -65,7 +69,7 @@ Today none of this is built: rendering is placeholder shapes, there is no agent 
 
 ```sh
 cmake -S . -B build -G "MinGW Makefiles"   # configure (first build downloads & builds deps — slow)
-cmake --build build                        # build game + editor + server + tests
+cmake --build build                        # build game, server, agent, launcher, editor and tests
 
 ctest --test-dir build --output-on-failure # run the unit tests (doctest)
 ```
@@ -87,9 +91,12 @@ The server accepts one client at a time for now. Run it on `127.0.0.1` for solo 
 **Other executables**
 
 ```sh
+./build/bin/launcher/econlauncher.exe      # graphical launcher: connect or host locally
 ./build/bin/editor/worldeditor.exe         # visual world editor (systems, objects, galaxy links)
 ./build/bin/server/econserver.exe          # batch headless simulation (no client, prints galaxy stats)
 ./build/bin/server/econserver.exe hosttest # server-loop smoke test over the in-process transport
+./build/bin/agent/econagent.exe connect 127.0.0.1 50800  # MCP server on stdio
+./build/bin/agent/econagent.exe selftest 127.0.0.1 50800 # scripted agent smoke test
 ```
 
 ---
@@ -117,6 +124,8 @@ data/                 the game world as JSON (systems, galaxy index) — not har
 src/
   engine/             shared core (static lib): world, entities, factions, UI, render
   game/               the game client + the authoritative Simulation + headless server
+  agent/              MCP bridge: an ordinary TCP game client for an AI agent
+  launcher/           graphical server / connection launcher
   editor/             the visual world editor
 tests/                doctest unit tests (protocol / TCP round-trips)
 documents/            design docs (concept, world format, factions/AI, living galaxy, assets)

@@ -46,6 +46,7 @@ Editor::Editor()
 {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(screenWidth_, screenHeight_, "EconSpace — World Editor");
+    SetExitKey(KEY_NULL);  // Escape cancels editor modes; it must not close the editor window.
     SetWindowMinSize(960, 600);
     SetTargetFPS(60);
     Ui::LoadAssets();

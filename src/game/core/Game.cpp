@@ -42,6 +42,7 @@ Game::Game(std::unique_ptr<Net::TcpConnection> conn) : player_(500.0), netConn_(
 
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);  // window can be resized by its edge
     InitWindow(screenWidth_, screenHeight_, "EconSpace");
+    SetExitKey(KEY_NULL);  // Escape belongs to the in-game menu, not raylib's exit shortcut.
     SetWindowMinSize(960, 600);
     SetTargetFPS(60);
     Ui::LoadAssets();
@@ -97,7 +98,7 @@ Game::~Game()
 }
 void Game::Run()
 {
-    while (!WindowShouldClose())
+    while (!WindowShouldClose() && !exitRequested_)
     {
         float dt = GetFrameTime();
 
@@ -118,9 +119,20 @@ void Game::Run()
         if (flashTimer_ > 0.0f)
             flashTimer_ -= dt;
 
+        // Escape toggles the modal pause menu; while the galaxy map is open it closes the map.
+        if (IsKeyPressed(KEY_ESCAPE))
+        {
+            if (pauseMenuOpen_)
+                pauseMenuOpen_ = false;
+            else if (galaxyMapOpen_)
+                galaxyMapOpen_ = false;
+            else
+                pauseMenuOpen_ = true;
+        }
+
         // Input (edge triggers, UI, clicks) — once per frame. Continuous ship
         // control is also set here and read on every simulation step.
-        if (mode_ == GameMode::Flying)
+        if (mode_ == GameMode::Flying && !pauseMenuOpen_)
             HandleInput(dt);
 
         // The simulation runs at a fixed step, separate from the render rate.
@@ -132,7 +144,7 @@ void Game::Run()
             simAccumulator_ = 0.25f;
         while (simAccumulator_ >= SIM_DT)
         {
-            if (mode_ == GameMode::Flying)
+            if (mode_ == GameMode::Flying && !pauseMenuOpen_)
             {
                 // CLIENT-SIDE PREDICTION of the own ship's movement. Number the input,
                 // push it into the unacked buffer, send it to the server, and immediately apply the
@@ -212,6 +224,8 @@ void Game::Run()
         {
             DrawStationScreen();
         }
+        if (pauseMenuOpen_)
+            DrawPauseMenu();
         EndDrawing();
     }
 }
@@ -255,9 +269,6 @@ void Game::HandleInput(float dt)
 
     if (IsKeyPressed(KEY_G))
         galaxyMapOpen_ = !galaxyMapOpen_;
-    if (galaxyMapOpen_ && IsKeyPressed(KEY_ESCAPE))
-        galaxyMapOpen_ = false;
-
     float wheel = GetMouseWheelMove();
     if (wheel != 0.0f && !overUi)  // over a window, the wheel goes to the window (e.g. radar)
         camera_.zoom = Clamp(camera_.zoom * (1.0f + wheel * 0.12f), 0.04f, 2.5f);

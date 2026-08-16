@@ -52,6 +52,40 @@ void Game::DrawStarfield()
     }
 }
 
+void Game::DrawPauseMenu()
+{
+    // The overlay belongs to the game client only. It is drawn last, so no part of
+    // the current flight or station screen remains interactive-looking above it.
+    DrawRectangle(0, 0, screenWidth_, screenHeight_, Fade(BLACK, 0.5f));
+
+    const int titleSize = 26;
+    const char* title = "ПАУЗА";
+    Ui::Text(title, (screenWidth_ - Ui::TextWidth(title, titleSize)) / 2,
+             screenHeight_ / 2 - 112, titleSize, WHITE);
+
+    const float buttonW = 300.0f;
+    const float buttonH = 56.0f;
+    const float buttonX = (screenWidth_ - buttonW) / 2.0f;
+    const float firstY = screenHeight_ / 2.0f - 48.0f;
+
+    auto button = [&](Rectangle bounds, const char* label, const std::function<void()>& action)
+    {
+        const bool hovered = CheckCollisionPointRec(GetMousePosition(), bounds);
+        // No fill: these are deliberately transparent outline buttons over the dimmed game.
+        DrawRectangleLinesEx(bounds, hovered ? 3.0f : 2.0f, WHITE);
+        const int textSize = 18;
+        Ui::Text(label, (int)(bounds.x + (bounds.width - Ui::TextWidth(label, textSize)) / 2.0f),
+                 (int)(bounds.y + (bounds.height - textSize) / 2.0f), textSize, WHITE);
+        if (hovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+            action();
+    };
+
+    button({ buttonX, firstY, buttonW, buttonH }, "Вернуться",
+           [this] { pauseMenuOpen_ = false; });
+    button({ buttonX, firstY + buttonH + 18.0f, buttonW, buttonH }, "Выйти из игры",
+           [this] { exitRequested_ = true; });
+}
+
 void Game::DrawWorld()
 {
     DrawStarfield();
@@ -219,30 +253,30 @@ void Game::DrawSettingsContent(Rectangle area)
     int x = (int)area.x;
     int y = (int)area.y;
 
-    Ui::Text("RESOLUTION", x, y, 14, Ui::TEXT_DIM);
-    y += 22;
+    Ui::Text("RESOLUTION", x, y, 16, Ui::TEXT_DIM);
+    y += 24;
     for (const Res& r : modes)
     {
         bool   current = (screenWidth_ == r.w && screenHeight_ == r.h);
         Button btn(Rectangle{ area.x, (float)y, area.width, 30.0f },
                    TextFormat("%d x %d%s", r.w, r.h, current ? "   *" : ""),
                    [this, r]() { ApplyResolution(r.w, r.h); });
-        btn.Process();
+        btn.Process(!pauseMenuOpen_);
         y += 36;
     }
 
     y += 10;
-    Ui::Text("DISPLAY", x, y, 14, Ui::TEXT_DIM);
-    y += 22;
+    Ui::Text("DISPLAY", x, y, 16, Ui::TEXT_DIM);
+    y += 24;
     bool   fs = IsWindowState(FLAG_BORDERLESS_WINDOWED_MODE);
     Button fsBtn(Rectangle{ area.x, (float)y, area.width, 30.0f },
                  fs ? "Fullscreen: ON" : "Fullscreen: off", []() { ToggleBorderlessWindowed(); });
-    fsBtn.Process();
+    fsBtn.Process(!pauseMenuOpen_);
     y += 42;
 
     Button resetBtn(Rectangle{ area.x, (float)y, area.width, 30.0f }, "Reset window layout",
                     [this]() { ResetWindowLayout(); });
-    resetBtn.Process();
+    resetBtn.Process(!pauseMenuOpen_);
 }
 
 // Radar minimap: a free view of the system (does not follow the player). Inside the window
@@ -415,7 +449,7 @@ void Game::DrawOverviewContent(Rectangle area)
     Vector2 m = GetMousePosition();
     bool    clicked = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
     bool    rclicked = IsMouseButtonPressed(MOUSE_BUTTON_RIGHT);
-    int     rowH = 20;
+    int     rowH = 24;
     int     y = (int)area.y;
     int     selId = selected_ != nullptr ? selected_->GetId() : 0;
 
@@ -430,9 +464,9 @@ void Game::DrawOverviewContent(Rectangle area)
 
         float dx = e->pos.x - sp.x;
         float dy = e->pos.y - sp.y;
-        Ui::Text(e->name.c_str(), (int)area.x + 4, y + 3, 14, Ui::TEXT);
+        Ui::Text(e->name.c_str(), (int)area.x + 4, y + 4, 16, Ui::TEXT);
         const char* d = TextFormat("%.0f", sqrtf(dx * dx + dy * dy));
-        Ui::Text(d, (int)(area.x + area.width) - Ui::TextWidth(d, 14) - 4, y + 3, 14, Ui::TEXT_DIM);
+        Ui::Text(d, (int)(area.x + area.width) - Ui::TextWidth(d, 16) - 4, y + 4, 16, Ui::TEXT_DIM);
 
         if (CheckCollisionPointRec(m, row))
         {
@@ -598,8 +632,10 @@ void Game::DrawMenuBar()
                                  : (hover ? Fade(Ui::ACCENT, 0.12f) : Ui::PANEL_BG));
         DrawRectangleLinesEx(b, 1.0f, (open || hover) ? Ui::ACCENT : Ui::PANEL_BORDER);
 
-        int tw = Ui::TextWidth(labels[i], 14);
-        Ui::Text(labels[i], (int)(b.x + (b.width - tw) / 2.0f), (int)b.y + 11, 14, accent);
+        const int labelSize = 16;
+        int       tw = Ui::TextWidth(labels[i], labelSize);
+        Ui::Text(labels[i], (int)(b.x + (b.width - tw) / 2.0f),
+                 (int)(b.y + (b.height - labelSize) / 2.0f), labelSize, accent);
     }
 }
 
@@ -612,21 +648,21 @@ void Game::DrawStatusContent(Rectangle area)
     int barW = (int)area.width;
 
     float shFrac = playerShip_->GetShields() / playerShip_->GetMaxShields();
-    Ui::Text("SHIELDS", x, y, 14, Ui::TEXT_DIM);
-    DrawRectangle(x, y + 16, barW, 9, Fade(GRAY, 0.35f));
-    DrawRectangle(x, y + 16, (int)(barW * shFrac), 9, Ui::ACCENT);
-    y += 32;
-
-    float hFrac = playerShip_->GetHull() / playerShip_->GetMaxHull();
-    Ui::Text("HULL", x, y, 14, Ui::TEXT_DIM);
-    DrawRectangle(x, y + 16, barW, 9, Fade(GRAY, 0.35f));
-    DrawRectangle(x, y + 16, (int)(barW * hFrac), 9, hFrac > 0.3f ? LIME : RED);
+    Ui::Text("SHIELDS", x, y, 16, Ui::TEXT_DIM);
+    DrawRectangle(x, y + 20, barW, 9, Fade(GRAY, 0.35f));
+    DrawRectangle(x, y + 20, (int)(barW * shFrac), 9, Ui::ACCENT);
     y += 38;
 
+    float hFrac = playerShip_->GetHull() / playerShip_->GetMaxHull();
+    Ui::Text("HULL", x, y, 16, Ui::TEXT_DIM);
+    DrawRectangle(x, y + 20, barW, 9, Fade(GRAY, 0.35f));
+    DrawRectangle(x, y + 20, (int)(barW * hFrac), 9, hFrac > 0.3f ? LIME : RED);
+    y += 44;
+
     Ui::Text(TextFormat("Speed   %.0f", playerShip_->GetSpeed()), x, y, 16, Ui::TEXT);
-    y += 22;
+    y += 24;
     Ui::Text(TextFormat("Money   %.0f", player_.GetMoney()), x, y, 16, GOLD);
-    y += 22;
+    y += 24;
     // Cargo — from the snapshot (over the network playerShip_'s hold isn't synced; the server
     // collects ore into its own ship, the snapshot carries the current volume). Single-player the
     // snapshot = player.
@@ -637,24 +673,24 @@ void Game::DrawStatusContent(Rectangle area)
     const Skills& sk = player_.GetSkills();
     Ui::Text(TextFormat("Skills  P%d  M%d  T%d", sk.GetLevel(SkillType::Piloting),
                         sk.GetLevel(SkillType::Mining), sk.GetLevel(SkillType::Trading)),
-             x, y, 14, Ui::TEXT_DIM);
-    y += 26;
+             x, y, 16, Ui::TEXT_DIM);
+    y += 24;
 
     // Stabilizer/mining toggles — from the snapshot (server-authoritative; the predicted
     // playerShip_ would flicker over the network due to replaying one-shot commands).
     bool stab = snapshot_.player.stabilizer;
     bool mine = snapshot_.player.mining;
-    Ui::Text(TextFormat("stabilizer  %s", stab ? "ON" : "off"), x, y, 14,
+    Ui::Text(TextFormat("stabilizer  %s", stab ? "ON" : "off"), x, y, 16,
              stab ? Ui::ACCENT : Ui::TEXT_DIM);
-    y += 18;
-    Ui::Text(TextFormat("mining  %s", mine ? "ON" : "off"), x, y, 14,
+    y += 22;
+    Ui::Text(TextFormat("mining  %s", mine ? "ON" : "off"), x, y, 16,
              mine ? Ui::ACCENT : Ui::TEXT_DIM);
-    y += 18;
-    Ui::Text(TextFormat("weapon  %s", weaponOn_ ? "ON" : "off"), x, y, 14,
+    y += 22;
+    Ui::Text(TextFormat("weapon  %s", weaponOn_ ? "ON" : "off"), x, y, 16,
              weaponOn_ ? Ui::ACCENT : Ui::TEXT_DIM);
-    y += 18;
+    y += 22;
     if (playerShip_->IsAutopilotOn())
-        Ui::Text("autopilot  ON", x, y, 14, GREEN);
+        Ui::Text("autopilot  ON", x, y, 16, GREEN);
 }
 
 void Game::DrawHud()
@@ -808,7 +844,7 @@ void Game::DrawStationScreen()
                           clientLink_->Send(Proto::EncodeCommand(c));
                           FlashMessage("Bounty paid — record cleared");
                       });
-        payBtn.Process();
+        payBtn.Process(!pauseMenuOpen_);
     }
 
     // --- Mission board: right column if the window is wide enough ---
@@ -847,7 +883,7 @@ void Game::DrawStationScreen()
                                c.sellAmount = cargo;
                                clientLink_->Send(Proto::EncodeCommand(c));
                            });
-            sellBtn.Process();
+            sellBtn.Process(!pauseMenuOpen_);
         }
         rowY += 40;
         resIdx++;
@@ -886,7 +922,7 @@ void Game::DrawStationScreen()
                                  clientLink_->Send(Proto::EncodeCommand(c));
                                  currentShipIndex_ = (int)i;
                              });
-            switchBtn.Process();
+            switchBtn.Process(!pauseMenuOpen_);
         }
         else
         {
@@ -906,14 +942,14 @@ void Game::DrawStationScreen()
                               ownedShips_[i] = true;
                               currentShipIndex_ = (int)i;
                           });
-            buyBtn.Process();
+            buyBtn.Process(!pauseMenuOpen_);
         }
         shipY += 38;
     }
 
     Button undockBtn(Rectangle{ (float)contentX, (float)(py + ph - 60), 200.0f, 40.0f }, "Undock",
                      [this]() { Undock(); });
-    undockBtn.Process();
+    undockBtn.Process(!pauseMenuOpen_);
 }
 
 // Station mission board: a list of offers with an Accept button on each.
@@ -938,11 +974,11 @@ void Game::DrawMissionBoard(int x, int y, int w)
         Ui::Text(m.title.c_str(), x + 10, rowY + 7, 16, FactionColor(m.faction));
         Ui::Text(m.description.c_str(), x + 10, rowY + 29, 14, Ui::TEXT);
         Ui::Text(TextFormat("Reward  %.0f cr   rep +%.0f", m.rewardMoney, m.rewardRep), x + 10,
-                 rowY + 49, 13, GOLD);
+                 rowY + 49, 14, GOLD);
 
         Button accept(Rectangle{ (float)(x + w - 96), (float)(rowY + 38), 86.0f, 26.0f }, "Accept",
                       [&toAccept, i]() { toAccept = (int)i; });
-        accept.Process();
+        accept.Process(!pauseMenuOpen_);
 
         rowY += rowH;
     }
@@ -971,22 +1007,22 @@ void Game::DrawMissionBoard(int x, int y, int w)
             continue;
         anyReady = true;
 
-        Rectangle box{ (float)x, (float)rowY, (float)w, 36.0f };
+        Rectangle box{ (float)x, (float)rowY, (float)w, 40.0f };
         DrawRectangleRec(box, Fade(Ui::TITLE_BG, 0.5f));
         DrawRectangleLinesEx(box, 1.0f, Ui::PANEL_BORDER);
 
         Ui::Text(m.description.c_str(), x + 10, rowY + 4, 14, Ui::TEXT);
-        Ui::Text(TextFormat("+%.0f cr", m.rewardMoney), x + 10, rowY + 20, 12, GOLD);
+        Ui::Text(TextFormat("+%.0f cr", m.rewardMoney), x + 10, rowY + 22, 14, GOLD);
 
-        Button complete(Rectangle{ (float)(x + w - 104), (float)(rowY + 5), 94.0f, 26.0f },
+        Button complete(Rectangle{ (float)(x + w - 104), (float)(rowY + 7), 94.0f, 26.0f },
                         "Complete", [&toComplete, i]() { toComplete = (int)i; });
-        complete.Process();
+        complete.Process(!pauseMenuOpen_);
 
-        rowY += 44;
+        rowY += 48;
     }
     if (!anyReady)
     {
-        Ui::Text("Nothing to turn in here.", x, rowY, 13, Ui::TEXT_DIM);
+        Ui::Text("Nothing to turn in here.", x, rowY, 14, Ui::TEXT_DIM);
         rowY += 20;
     }
     if (toComplete >= 0)
@@ -1011,12 +1047,12 @@ void Game::DrawMissionsContent(Rectangle area)
     if (active.empty())
     {
         Ui::Text("No active missions", x, y, 16, Ui::TEXT_DIM);
-        Ui::Text("Accept jobs at a station.", x, y + 22, 14, Ui::TEXT_DIM);
+        Ui::Text("Accept jobs at a station.", x, y + 24, 16, Ui::TEXT_DIM);
         return;
     }
 
     const Color done = { 120, 210, 130, 255 };  // color of a completed objective
-    const int   rowH = 60;
+    const int   rowH = 68;
 
     for (const Mission& m : active)
     {
@@ -1024,7 +1060,7 @@ void Game::DrawMissionsContent(Rectangle area)
             break;  // doesn't fit — truncate the list
 
         Ui::Text(m.title.c_str(), x, y, 16, FactionColor(m.faction));
-        Ui::Text(m.description.c_str(), x, y + 19, 13, Ui::TEXT);
+        Ui::Text(m.description.c_str(), x, y + 22, 16, Ui::TEXT);
 
         // The progress line depends on the mission type.
         const char* line = "";
@@ -1065,7 +1101,7 @@ void Game::DrawMissionsContent(Rectangle area)
                 break;
             }
         }
-        Ui::Text(line, x, y + 38, 14, complete ? done : Ui::TEXT_DIM);
+        Ui::Text(line, x, y + 46, 16, complete ? done : Ui::TEXT_DIM);
 
         y += rowH;
     }
@@ -1205,16 +1241,16 @@ void Game::DrawGalaxyMap()
                                               : Color{ 230, 120, 60, 255 };
             Ui::Text(
                 TextFormat("sec %.2f  pir %d  econ %.0f%%", security, pirates, prosperity * 100.0f),
-                (int)p.x + 14, (int)p.y + 10, 12, secCol);
+                (int)p.x + 14, (int)p.y + 10, 14, secCol);
             // Territory controller (L3) — in the faction's color.
-            Ui::Text(FactionName(controller).c_str(), (int)p.x + 14, (int)p.y + 24, 12,
+            Ui::Text(FactionName(controller).c_str(), (int)p.x + 14, (int)p.y + 26, 14,
                      FactionColor(controller));
             // The node ring is tinted with the controller's color.
             DrawCircleLines((int)p.x, (int)p.y, cur ? 13.0f : 10.0f,
                             Fade(FactionColor(controller), 0.7f));
         }
         if (cur)
-            Ui::Text("you are here", (int)p.x + 14, (int)p.y + 38, 12, Ui::TEXT_DIM);
+            Ui::Text("you are here", (int)p.x + 14, (int)p.y + 44, 14, Ui::TEXT_DIM);
     }
 
     EndScissorMode();
@@ -1229,8 +1265,8 @@ void Game::DrawGalaxyMap()
         ny += 22;
         for (size_t i = news.size(); i-- > 0;)  // newest on top
         {
-            Ui::Text(news[i].c_str(), nx, ny, 12, Ui::TEXT_DIM);
-            ny += 18;
+            Ui::Text(news[i].c_str(), nx, ny, 14, Ui::TEXT_DIM);
+            ny += 20;
         }
     }
 }

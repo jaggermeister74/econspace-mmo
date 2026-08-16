@@ -41,6 +41,15 @@
                 -3000
             ],
             "size": 150
+        },
+        {
+            "destination": "verge",
+            "name": "Gate to Tau Verge",
+            "pos": [
+                -21223,
+                1071
+            ],
+            "size": 150
         }
     ],
     "nebulae": [

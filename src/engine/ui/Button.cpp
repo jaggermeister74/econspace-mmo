@@ -6,7 +6,7 @@ Button::Button(Rectangle bounds, std::string label, std::function<void()> onClic
 {
 }
 
-void Button::Process()
+void Button::Process(bool interactive)
 {
     Vector2 mouse = GetMousePosition();
     bool    hovered = CheckCollisionPointRec(mouse, bounds_);
@@ -20,6 +20,6 @@ void Button::Process()
              (int)(bounds_.y + (bounds_.height - fontSize) / 2), fontSize,
              hovered ? Ui::ACCENT : Ui::TEXT);
 
-    if (hovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+    if (interactive && hovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
         onClick_();
 }

@@ -69,6 +69,7 @@ private:
     void DrawHud();
     void DrawStationScreen();
     void DrawMissionBoard(int x, int y, int w);  // mission board at the station
+    void DrawPauseMenu();  // modal Escape menu, drawn over the current game view
 
     void SetupWindows();                         // creates the UI windows
     void ResetWindowLayout();                    // arranges windows at their default positions
@@ -164,6 +165,11 @@ private:
     std::unique_ptr<Net::TcpConnection> netConn_;
     bool        protocolMismatchReported_ = false;  // say it once, not every frame
     ITransport* clientLink_ = nullptr;
+
+    // Escape opens a modal menu. The client exits only through its explicit button
+    // (or the operating system's window close control), never through raylib's default key.
+    bool pauseMenuOpen_ = false;
+    bool exitRequested_ = false;
     // Client prediction/reconciliation of the own ship (M4e, per Gambetta):
     // inputs are numbered and kept until the server acks them, so unacked ones can be
     // replayed over the authoritative state (without snapping backward).
